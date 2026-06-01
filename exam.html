@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Online Examination System</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f7f6;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 600px;
+        }
+        h2, h3 { color: #333; text-align: center; }
+        .hidden { display: none; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold;}
+        input[type="text"], input[type="password"] {
+            width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;
+        }
+        button {
+            width: 100%; padding: 10px; background-color: #0056b3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-top: 10px;
+        }
+        button:hover { background-color: #004494; }
+        .logout-btn { background-color: #dc3545; margin-top: 20px; }
+        .logout-btn:hover { background-color: #c82333; }
+        
+        /* Exam Specific */
+        .header-info { display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #eee; }
+        .timer { color: #d9534f; }
+        .question-block { margin-bottom: 20px; }
+        .option-label { display: block; margin: 8px 0; font-weight: normal; cursor: pointer; }
+        
+        /* Admin Specific */
+        .admin-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .admin-table th, .admin-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .admin-table th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+    <div id="login-page">
+        <h2>System Login</h2>
+        <div id="login-error" style="color: red; text-align: center; display: none;">Invalid credentials</div>
+        <div class="form-group">
+            <label>Username</label>
+            <input type="text" id="username" placeholder="student or admin">
+        </div>
+        <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="password" placeholder="student123 or admin123">
+        </div>
+        <button onclick="login()">Login</button>
+    </div>
+
+    <div id="student-page" class="hidden">
+        <div class="header-info">
+            <span>Student: <span id="student-name"></span></span>
+            <span class="timer" id="timer-display">Time Left: 05:00</span>
+        </div>
+        
+        <div id="exam-instructions">
+            <h3>Ready to start your exam?</h3>
+            <p>You have 5 minutes to complete the test. The exam will submit automatically when time runs out.</p>
+            <button onclick="startExam()">Start Exam</button>
+        </div>
+
+        <div id="exam-content" class="hidden">
+            <div id="questions-container"></div>
+            <button onclick="submitExam()">Submit Exam</button>
+        </div>
+    </div>
+
+    <div id="result-page" class="hidden">
+        <h2>Exam Submitted Successfully</h2>
+        <h3 style="font-size: 48px; color: #28a745; margin: 20px 0;" id="score-display">0/0</h3>
+        <p style="text-align: center;">Your result has been recorded automatically in the database.</p>
+        <button class="logout-btn" onclick="logout()">Logout</button>
+    </div>
+
+    <div id="admin-page" class="hidden">
+        <h2>Admin Dashboard</h2>
+        <p><strong>Incharge:</strong> Deepesh sir | <strong>Guide:</strong> Chandni mam</p>
+        
+        <h3>Student Results (Database View)</h3>
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Student ID</th>
+                    <th>Score</th>
+                    <th>Total Questions</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="results-table-body">
+                </tbody>
+        </table>
+        <button class="logout-btn" onclick="logout()">Logout</button>
+    </div>
+
+</div>
+
+<script>
+    // --- SIMULATED DATABASE ---
+    const users = {
+        'student': { password: 'student123', role: 'student' },
+        'admin': { password: 'admin123', role: 'admin' }
+    };
+
+    const questionsDB = [
+        { q: "What does HTML stand for?", options: ["Hyper Text Preprocessor", "Hyper Text Markup Language", "Hyper Tool Multi Language", "Hyperlink and Text Markup Language"], answer: 1 },
+        { q: "Which of the following is a database management system?", options: ["MySQL", "JavaScript", "HTML", "CSS"], answer: 0 },
+        { q: "What is the main function of the ALUs in a computer?", options: ["Store data", "Display output", "Perform arithmetic and logic operations", "Connect to the internet"], answer: 2 },
+        { q: "Which data structure uses LIFO (Last In First Out)?", options: ["Queue", "Array", "Tree", "Stack"], answer: 3 }
+    ];
+
+    let examResultsDB = [
+        { student: 'John_Doe', score: 3, total: 4, status: 'Passed' },
+        { student: 'Jane_Smith', score: 4, total: 4, status: 'Passed' }
+    ];
+
+    // --- SYSTEM STATE VARIABLES ---
+    let currentUser = '';
+    let timerInterval;
+    let timeRemaining = 300; // 5 minutes in seconds
+
+    // --- LOGIN LOGIC ---
+    function login() {
+        const user = document.getElementById('username').value;
+        const pass = document.getElementById('password').value;
+        const errorDiv = document.getElementById('login-error');
+
+        if (users[user] && users[user].password === pass) {
+            currentUser = user;
+            errorDiv.style.display = 'none';
+            document.getElementById('login-page').classList.add('hidden');
+            
+            if (users[user].role === 'student') {
+                document.getElementById('student-page').classList.remove('hidden');
+                document.getElementById('student-name').innerText = user;
+            } else {
+                document.getElementById('admin-page').classList.remove('hidden');
+                loadAdminDashboard();
+            }
+        } else {
+            errorDiv.style.display = 'block';
+        }
+    }
+
+    function logout() {
+        clearInterval(timerInterval);
+        document.getElementById('login-page').classList.remove('hidden');
+        document.getElementById('student-page').classList.add('hidden');
+        document.getElementById('exam-content').classList.add('hidden');
+        document.getElementById('exam-instructions').classList.remove('hidden');
+        document.getElementById('result-page').classList.add('hidden');
+        document.getElementById('admin-page').classList.add('hidden');
+        
+        document.getElementById('username').value = '';
+        document.getElementById('password').value = '';
+        timeRemaining = 300; // reset timer
+    }
+
+    // --- STUDENT EXAM LOGIC ---
+    function startExam() {
+        document.getElementById('exam-instructions').classList.add('hidden');
+        document.getElementById('exam-content').classList.remove('hidden');
+        
+        renderQuestions();
+        startTimer();
+    }
+
+    function renderQuestions() {
+        const container = document.getElementById('questions-container');
+        container.innerHTML = '';
+        
+        questionsDB.forEach((item, index) => {
+            let optionsHTML = '';
+            item.options.forEach((opt, optIndex) => {
+                optionsHTML += `
+                    <label class="option-label">
+                        <input type="radio" name="q${index}" value="${optIndex}">
+                        ${opt}
+                    </label>
+                `;
+            });
+
+            container.innerHTML += `
+                <div class="question-block">
+                    <p><strong>Q${index + 1}. ${item.q}</strong></p>
+                    ${optionsHTML}
+                </div>
+            `;
+        });
+    }
+
+    function startTimer() {
+        const display = document.getElementById('timer-display');
+        
+        timerInterval = setInterval(() => {
+            let minutes = Math.floor(timeRemaining / 60);
+            let seconds = timeRemaining % 60;
+            
+            minutes = minutes < 10 ? "0" + minutes : minutes;
+            seconds = seconds < 10 ? "0" + seconds : seconds;
+            
+            display.innerText = `Time Left: ${minutes}:${seconds}`;
+            
+            if (timeRemaining <= 0) {
+                clearInterval(timerInterval);
+                alert("Time is up! Submitting automatically.");
+                submitExam();
+            }
+            timeRemaining--;
+        }, 1000);
+    }
+
+    function submitExam() {
+        clearInterval(timerInterval);
+        
+        let score = 0;
+        questionsDB.forEach((item, index) => {
+            const selected = document.querySelector(`input[name="q${index}"]:checked`);
+            if (selected && parseInt(selected.value) === item.answer) {
+                score++;
+            }
+        });
+
+        // Save to Simulated Database
+        examResultsDB.push({
+            student: currentUser,
+            score: score,
+            total: questionsDB.length,
+            status: (score / questionsDB.length) >= 0.5 ? 'Passed' : 'Failed'
+        });
+
+        // Show Result Page
+        document.getElementById('student-page').classList.add('hidden');
+        document.getElementById('result-page').classList.remove('hidden');
+        document.getElementById('score-display').innerText = `${score} / ${questionsDB.length}`;
+    }
+
+    // --- ADMIN LOGIC ---
+    function loadAdminDashboard() {
+        const tbody = document.getElementById('results-table-body');
+        tbody.innerHTML = '';
+        
+        examResultsDB.forEach(result => {
+            let statusColor = result.status === 'Passed' ? 'green' : 'red';
+            tbody.innerHTML += `
+                <tr>
+                    <td>${result.student}</td>
+                    <td>${result.score}</td>
+                    <td>${result.total}</td>
+                    <td style="color: ${statusColor}; font-weight: bold;">${result.status}</td>
+                </tr>
+            `;
+        });
+    }
+</script>
+
+</body>
+</html>
